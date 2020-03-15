@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import ujson
 import codecs
+from threading import Thread
+from queue import Queue
 
 
 def writeFile(data, path):
@@ -15,31 +17,34 @@ def writeFile(data, path):
 class NeteaseMusic:
 
     def __init__(self):
+        """
+        :param dbQueue:Queue 用于多线程处理数据库访问请求
+        """
         pass
 
-    def getHtmlText(self, url):
-        global r
-        hd = {
-            'Referer': 'http://music.163.com/',
-            'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                          r'Chrome/63.0.3239.132 Safari/537.36 '
-        }
-        try:
-            r = requests.get(url, timeout=30, headers=hd)
-            print(r.status_code)
-            r.raise_for_status()
-            r.encoding = "UTF-8"
-            return r.text
-        except requests.HTTPError:
-            return "连接异常：" + r.status_code
-        except requests.ConnectionError:
-            return "连接错误"
-        except requests.Timeout:
-            return "连接超时"
-        except Exception as e:
-            return "未知错误" + str(e)
+    # def getHtmlText(self, url):
+    #     global r
+    #     hd = {
+    #         'Referer': 'http://music.163.com/',
+    #         'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+    #                       r'Chrome/63.0.3239.132 Safari/537.36 '
+    #     }
+    #     try:
+    #         r = requests.get(url, timeout=30, headers=hd)
+    #         print(r.status_code)
+    #         r.raise_for_status()
+    #         r.encoding = "UTF-8"
+    #         return r.text
+    #     except requests.HTTPError:
+    #         return "连接异常：" + r.status_code
+    #     except requests.ConnectionError:
+    #         return "连接错误"
+    #     except requests.Timeout:
+    #         return "连接超时"
+    #     except Exception as e:
+    #         return "未知错误" + str(e)
 
-    def getToplist(self, toplist_id=1):
+    def getToplist(self,html_text):
         """
         获取并解析榜单
         1:云音乐飙升榜 2:新歌榜 3:网易原创歌曲榜 4:热歌榜
@@ -50,6 +55,7 @@ class NeteaseMusic:
         22:台湾Hito 23:欧美热歌 24:欧美新歌 25:法国NRJ Vos Hits
         26:ACG动画 27:ACG游戏 28:ACG VOCALOID 29:中国新乡村
         :param toplist_id: dictionary
+        :param html_text:str
         :return:[(id,name),...] toplist类型
         """
         toplist_dic = {1: 19723756, 2: 3779629, 3: 2884035, 4: 3778678, 5: 991319590, 6: 71384707, 7: 1978921795,
@@ -57,8 +63,8 @@ class NeteaseMusic:
                        14: 2006508653, 15: 180106, 16: 60198, 17: 3812895, 18: 21845217, 19: 11641012, 20: 60131,
                        21: 120001, 22: 112463, 23: 2809513713, 24: 2809577409, 25: 27135204, 26: 3001835560,
                        27: 3001795926, 28: 3001890046, 29: 3112516681}
-        url = "http://music.163.com/discover/toplist?id=" + str(toplist_dic[toplist_id])
-        html_text = self.getHtmlText(url)
+        # url = "http://music.163.com/discover/toplist?id=" + str(toplist_dic[toplist_id])
+        # html_text = self.getHtmlText(url)
         # 解析
         html_soup = BeautifulSoup(html_text, 'html.parser')
         """
@@ -79,14 +85,15 @@ class NeteaseMusic:
         # print(html_text)
         return toplist
 
-    def getAlbum(self, album_id):
+    def getAlbum(self, html_text):
         """
         获取并解析专辑内歌曲内容
         :param album_id: 专辑的id
+        :param html_text:str
         :return: [(id,name),...] album类型
         """
-        url = "https://music.163.com/album?id=" + str(album_id)
-        html_text = self.getHtmlText(url)
+        # url = "https://music.163.com/album?id=" + str(album_id)
+        # html_text = self.getHtmlText(url)
         html_soup = BeautifulSoup(html_text, 'html.parser')
         ul_tag = html_soup.find_all(attrs={'class': 'f-hide'})[1]  # 这个具体可能发生变化
         album = []
@@ -99,15 +106,16 @@ class NeteaseMusic:
         # print(html_text)
         return album
 
-    def getSingerHotMusic(self, singer_id):
+    def getSingerHotMusic(self, html_text):
         """
         获取并解析歌手作曲内容
         :param singer_id:
+        :param html_text
         :return:
         """
         # https://music.163.com/artist?id=339594 mili的界面
-        url = "https://music.163.com/artist?id=" + str(singer_id)
-        html_text = self.getHtmlText(url)
+        # url = "https://music.163.com/artist?id=" + str(singer_id)
+        # html_text = self.getHtmlText(url)
         html_soup = BeautifulSoup(html_text, 'html.parser')
         ul_tag = html_soup.find_all(attrs={'class': 'f-hide'})[1]  # 这个具体可能发生变化
         # print(ul_tag)
@@ -121,15 +129,16 @@ class NeteaseMusic:
         # print(html_text)
         return hot50
 
-    def getSingerAlbum(self, singer_id):
+    def getSingerAlbum(self, html_text):
         """
         获取并解析歌手专辑
         :param singer_id:
+        :param html_text
         :return:
         """
         # https://music.163.com/#/artist/album?id=339594&limit=34&offset=0 mili的界面
-        url = "https://music.163.com/artist/album?id=" + str(singer_id) + "&limit=50&offset=0"  # 一次五十个专辑
-        html_text = self.getHtmlText(url)
+        # url = "https://music.163.com/artist/album?id=" + str(singer_id) + "&limit=50&offset=0"  # 一次五十个专辑
+        # html_text = self.getHtmlText(url)
         # print(html_text)
         html_soup = BeautifulSoup(html_text, 'html.parser')
         p_tag = html_soup.find_all(attrs={'class': 'dec dec-1 f-thide2 f-pre'})  # 这个具体可能发生变化
@@ -144,16 +153,17 @@ class NeteaseMusic:
         # print(html_text)
         return albumMusic
 
-    def getPlaylist(self, playlist_id):
+    def getPlaylist(self, html_text):
         """
         获取并解析歌单内歌曲内容
         ！！！歌单获取不了JSON的详细信息，被加密
         :param album_id: 专辑的id
+        :param html_text:str
         :return: [(id,name),...] album类型
         """
         # https://music.163.com/#/playlist?id=4880844442 某个歌单页面
-        url = "https://music.163.com/playlist?id=" + str(playlist_id)
-        html_text = self.getHtmlText(url)
+        # url = "https://music.163.com/playlist?id=" + str(playlist_id)
+        # html_text = self.getHtmlText(url)
         html_soup = BeautifulSoup(html_text, 'html.parser')
         ul_tag = html_soup.find_all(attrs={'class': 'f-hide'})[1]  # 这个具体可能发生变化
         # print(ul_tag)
@@ -167,27 +177,30 @@ class NeteaseMusic:
         # print(html_text)
         return playlist
 
-    def getMusicHotCmts_api(self, cmtThread):
+    def getMusicHotCmts_api(self, json_str):
         """
         获取一首歌的热门评论内容、点赞数、用户id、用户名字、时间
         :param cmtThread: string
+        :param json_str:str
         :return: MusicHotCmts: [{"content":str,"likes":int,"user_id":int,"user_name":str,"time",int}]
         http://music.163.com/api/v1/resource/comments/R_SO_4_516997458?limit=20&offset=0 可能活不了多久的api
         """
-        limit = 20
-        offset = 0
+        # limit = 20
+        # offset = 0
         MusicHotCmts = []
         # url 拼接
-        url = "http://music.163.com/api/v1/resource/comments/R_SO_4_" + str(cmtThread) + '?' \
-              + 'limit=' + str(limit) + '&offset=' + str(offset)
+        # url = "http://music.163.com/api/v1/resource/comments/R_SO_4_" + str(cmtThread) + '?' \
+        #     + 'limit=' + str(limit) + '&offset=' + str(offset)
         # 获取json的字符串
-        json_str = self.getHtmlText(url)
+        # json_str = self.getHtmlText(url)
         # print(json_str)
         # 写入文件来解析
         path = './cmts.txt'
         writeFile(json_str, path)
         # 解析json
-        json_data = ujson.load(codecs.open('./cmts.txt', 'r', encoding='utf-8'))
+        # json_data = ujson.load(codecs.open('./cmts.txt', 'r', encoding='utf-8'))
+        # print(json_str)
+        json_data = ujson.loads(json_str)
         hotComments = json_data['hotComments']
         for singleCmtJson in hotComments:
             singleCmt = dict()
@@ -201,6 +214,7 @@ class NeteaseMusic:
         # print(json_data)
         # print(MusicHotCmts)
 
+    # 过时
     def getMusicCmts_api(self, cmtThread, sum):
         """
         获取一首歌的最多sum个普通评论
@@ -240,5 +254,32 @@ class NeteaseMusic:
         # return musicCmts
         # print(json_data)
         print(musicCmts)
-        writeFile(str(musicCmts),"./a.txt")
+        writeFile(str(musicCmts), "./a.txt")
         print(len(musicCmts))
+
+
+class NeteaseMusicStream(NeteaseMusic, Thread):
+
+    def __init__(self, dbQueue,parseQueue):
+        Thread.__init__(self)
+        NeteaseMusic.__init__(self)
+        self.dbQueue = dbQueue
+        self.parseQueue = parseQueue
+        pass
+
+    def run(self):
+        """
+        开始执行任务
+        :return:
+        """
+        while True:
+            task = self.parseQueue.get()  # 等待任务，一直阻塞
+            parsed_data = ""
+            if task[1] == "toplist":
+                parsed_data = self.getToplist(task[0])
+            elif task[1] == "playlist":
+                parsed_data = self.getPlaylist(task[0])
+            elif task[1] == "hot comments":
+                parsed_data = self.getMusicHotCmts_api(task[0])
+            print(parsed_data)
+        pass
